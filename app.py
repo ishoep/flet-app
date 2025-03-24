@@ -1,14 +1,13 @@
 import flet as ft
 import datetime
 import time
-from typing import Optional, Dict, List
-import math
 import random
-import json
+import math
 import logging
+from typing import Optional
 from enum import Enum
 
-# Set up logging
+# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -16,83 +15,133 @@ logging.basicConfig(
 )
 
 class TableStatus(Enum):
-    AVAILABLE = "available"
-    OCCUPIED = "occupied"
-    RESERVED = "reserved"
-    MAINTENANCE = "maintenance"
-    WAITING = "waiting"
-
-class Language(Enum):
-    RUSSIAN = "ru"
-    UZBEK = "uz"
-    ENGLISH = "en"
+    AVAILABLE = "Свободен"
+    OCCUPIED = "Занят"
+    MAINTENANCE = "Обслуживание"
+    RESERVED = "Бронь"
 
 class BilliardTable(ft.Container):
-    def __init__(self, number: int, status: TableStatus = TableStatus.AVAILABLE, **kwargs):
+    def __init__(self, app, number: int, status: TableStatus = TableStatus.AVAILABLE, **kwargs):
         super().__init__(**kwargs)
+        self.app = app
         self.number = number
         self.status = status
-        self.width = 160
-        self.height = 80
-        self.border_radius = 8
+        self.width = 180
+        self.height = 180
+        self.border_radius = 12
         self.drag_interval = 10
-        self.rotate_angle = 0
         self.animate = ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT)
         self.on_hover = self.hover_animation
         self.on_click = self.select_table
         self.client_name = ""
         self.start_time = None
-        self.current_tariff = 8.50
+        self.current_tariff = 10  # 10 руб за минуту
         self.products = []
         self.selected = False
         
         self.status_colors = {
-            TableStatus.AVAILABLE: "#4CAF50",
-            TableStatus.OCCUPIED: "#FF9800",
-            TableStatus.MAINTENANCE: "#F44336",
-            TableStatus.RESERVED: "#2196F3",
-            TableStatus.WAITING: "#9C27B0"
+            TableStatus.AVAILABLE: ft.colors.with_opacity(0.8, "#4CAF50"),
+            TableStatus.OCCUPIED: ft.colors.with_opacity(0.8, "#FF9800"),
+            TableStatus.MAINTENANCE: ft.colors.with_opacity(0.8, "#F44336"),
+            TableStatus.RESERVED: ft.colors.with_opacity(0.8, "#2196F3")
         }
         
-        self.bgcolor = "#8B4513"  # Wooden color for table
+        self.bgcolor = ft.colors.with_opacity(0.9, "#8B4513")
         self.border = ft.border.all(2, "#5D4037")
+        self.gradient = ft.LinearGradient(
+            begin=ft.alignment.top_left,
+            end=ft.alignment.bottom_right,
+            colors=[ft.colors.with_opacity(0.7, "#8B4513"), ft.colors.with_opacity(0.9, "#5D4037")]
+        )
+        self.shadow = ft.BoxShadow(
+            spread_radius=1,
+            blur_radius=15,
+            color=ft.colors.with_opacity(0.3, "#000000"),
+            offset=ft.Offset(0, 0),
+            blur_style=ft.ShadowBlurStyle.NORMAL,
+        )
         self.content = self._create_table_content()
     
     def _create_table_content(self):
+        # Создаем элементы управления, которые будем обновлять
+        self.status_text = ft.Text(
+            self.status.value,
+            size=14,
+            color=self.status_colors[self.status],
+            weight=ft.FontWeight.BOLD
+        )
+        
+        self.time_text = ft.Text(
+            "00:00:00",
+            size=12,
+            color="white"
+        ) if self.status == TableStatus.OCCUPIED else ft.Container()
+        
         return ft.Stack(
             [
-                # Table surface
+                # Основная поверхность стола
                 ft.Container(
-                    width=140,
-                    height=60,
+                    width=160,
+                    height=120,
                     bgcolor="#2E7D32",
-                    border_radius=6,
+                    border_radius=10,
+                    border=ft.border.all(2, "#1B5E20"),
                     top=10,
                     left=10,
-                    border=ft.border.all(2, "#1B5E20")
+                    gradient=ft.LinearGradient(
+                        begin=ft.alignment.top_left,
+                        end=ft.alignment.bottom_right,
+                        colors=["#2E7D32", "#1B5E20"]
+                    ),
+                    shadow=ft.BoxShadow(
+                        spread_radius=0,
+                        blur_radius=10,
+                        color=ft.colors.with_opacity(0.2, "#000000"),
+                    )
                 ),
-                # Table pockets
-                self._create_pocket(10, 10),
-                self._create_pocket(130, 10),
-                self._create_pocket(10, 50),
-                self._create_pocket(130, 50),
-                # Table number
+                # Лузы
+                *[self._create_pocket(x, y) for x, y in [(10,10), (144,10), (10,110), (144,110)]],
+                # Номер стола
                 ft.Container(
+                    width=40,
+                    height=40,
+                    bgcolor=self.status_colors[self.status],
+                    border_radius=20,
+                    alignment=ft.alignment.center,
+                    left=70,
+                    top=50,
                     content=ft.Text(
                         f"{self.number}",
-                        size=16,
+                        size=18,
                         weight=ft.FontWeight.BOLD,
                         color="white"
                     ),
-                    width=30,
-                    height=30,
-                    bgcolor=self.status_colors.get(self.status, "#4CAF50"),
-                    border_radius=15,
+                    animate_opacity=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
+                    shadow=ft.BoxShadow(
+                        spread_radius=0,
+                        blur_radius=10,
+                        color=ft.colors.with_opacity(0.3, "#000000"),
+                    )
+                ),
+                # Статус и время
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            self.status_text,
+                            self.time_text
+                        ],
+                        spacing=2,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                    ),
+                    left=40,
+                    top=100,
+                    width=100,
                     alignment=ft.alignment.center,
-                    left=65,
-                    top=25
+                    opacity=0.9
                 )
-            ]
+            ],
+            width=180,
+            height=180
         )
     
     def _create_pocket(self, left, top):
@@ -102,451 +151,447 @@ class BilliardTable(ft.Container):
             bgcolor="black",
             border_radius=8,
             left=left,
-            top=top
+            top=top,
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=5,
+                color=ft.colors.with_opacity(0.5, "#000000"),
+            )
         )
     
     def hover_animation(self, e):
-        self.scale = 1.05 if e.data == "true" else 1
+        self.scale = 1.03 if e.data == "true" else 1
         self.border = ft.border.all(2, "#3498DB" if e.data == "true" else "#5D4037")
         self.update()
     
     def select_table(self, e):
-        self.selected = not self.selected
-        self.border = ft.border.all(3, "#3498DB" if self.selected else "#5D4037")
+        for table in self.app.tables:
+            table.selected = False
+            table.border = ft.border.all(2, "#5D4037")
+            table.update()
+        
+        self.selected = True
+        self.border = ft.border.all(3, "#3498DB")
         self.update()
-        e.page.table_details_panel.update_details(self)
-        e.page.update()
+        self.app.update_table_info(self)
+    
+    def update_status_display(self):
+        self.status_text.value = self.status.value
+        self.status_text.color = self.status_colors[self.status]
+        
+        if self.status == TableStatus.OCCUPIED:
+            if not isinstance(self.time_text, ft.Text):
+                self.time_text = ft.Text("00:00:00", size=12, color="white")
+        else:
+            if isinstance(self.time_text, ft.Text):
+                self.time_text = ft.Container()
+        
+        self.update()
 
 class ProductItem(ft.Container):
-    def __init__(self, name: str, price: float, stock: int, **kwargs):
+    def __init__(self, app, name: str, price: float, stock: int, category: str, **kwargs):
         super().__init__(**kwargs)
+        self.app = app
         self.name = name
         self.price = price
         self.stock = stock
-        self.width = 180
-        self.height = 120
-        self.bgcolor=ft.colors.WHITE
-        self.border_radius=12
-        self.padding=12
-        self.border=ft.border.all(1, "#E0E0E0")
+        self.category = category
+        self.width = 200
+        self.height = 140
+        self.bgcolor=ft.colors.with_opacity(0.8, "#424242")
+        self.border_radius=14
+        self.padding=14
+        self.border=ft.border.all(1, ft.colors.with_opacity(0.3, "#616161"))
         self.animate=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT)
         self.on_hover=self.hover_animation
+        self.shadow = ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=10,
+            color=ft.colors.with_opacity(0.2, "#000000"),
+        )
         
         self.content=ft.Column(
             controls=[
                 ft.Container(
-                    height=50,
-                    width=50,
-                    border_radius=8,
-                    bgcolor="#F5F5F5",
-                    content=ft.Icon(ft.icons.LOCAL_BAR, color="#757575", size=24),
-                    alignment=ft.alignment.center
+                    height=60,
+                    width=60,
+                    border_radius=10,
+                    bgcolor=ft.colors.with_opacity(0.2, "#616161"),
+                    content=ft.Icon(ft.icons.LOCAL_BAR, color="white", size=28),
+                    alignment=ft.alignment.center,
+                    animate_scale=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT)
                 ),
-                ft.Text(self.name, weight=ft.FontWeight.BOLD, size=16),
+                ft.Text(self.name, weight=ft.FontWeight.BOLD, size=16, color="white"),
                 ft.Row(
                     controls=[
-                        ft.Text(f"${self.price:.2f}", color="#388E3C", size=14),
-                        ft.Text(f"{self.stock} in stock", size=12, color="#757575")
+                        ft.Text(f"{self.price:.2f} ₽", color="#4CAF50", size=14),
+                        ft.Text(f"{self.stock} шт.", size=12, color="#BDBDBD")
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    width=150
+                    width=170
                 ),
-                ft.Container(height=5),
+                ft.Container(height=8),
                 ft.ElevatedButton(
-                    "Add",
-                    width=120,
-                    height=32,
+                    "Добавить",
+                    width=140,
+                    height=36,
+                    on_click=self.add_to_table,
                     style=ft.ButtonStyle(
                         padding=ft.Padding(0, 0, 0, 0),
-                        bgcolor={"": "#42A5F5", "hovered": "#1E88E5"},
-                        shape=ft.RoundedRectangleBorder(radius=8)
+                        bgcolor={"": ft.colors.with_opacity(0.8, "#42A5F5"), "hovered": ft.colors.with_opacity(1, "#1E88E5")},
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                        animation_duration=200,
+                        overlay_color=ft.colors.with_opacity(0.1, "#FFFFFF")
                     )
                 )
             ],
             alignment=ft.MainAxisAlignment.CENTER,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=5
+            spacing=6
         )
     
     def hover_animation(self, e):
         self.scale = 1.02 if e.data == "true" else 1
-        self.border = ft.border.all(1, "#42A5F5" if e.data == "true" else "#E0E0E0")
-        self.bgcolor = "#FAFAFA" if e.data == "true" else ft.colors.WHITE
-        self.update()
-
-class TableDetailsPanel(ft.Container):
-    def __init__(self):
-        super().__init__()
-        self.width = 400
-        self.height = 280
-        self.bgcolor=ft.colors.WHITE
-        self.border_radius=12
-        self.padding=15
-        self.border=ft.border.all(1, "#E0E0E0")
-        self.elevation=3
-        self.visible = False
-        self.current_table = None
-        
-        self.content = ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Text("Table Details", size=20, weight=ft.FontWeight.BOLD),
-                        ft.IconButton(
-                            icon=ft.icons.CLOSE,
-                            icon_size=20,
-                            on_click=self.close_panel,
-                            style=ft.ButtonStyle(
-                                shape=ft.CircleBorder(),
-                                padding=5
-                            )
-                        )
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-                ),
-                ft.Divider(height=1, color="#E0E0E0"),
-                ft.Column(
-                    spacing=10,
-                    controls=[
-                        self._create_detail_row("Status:", "-"),
-                        self._create_detail_row("Client:", "-"),
-                        self._create_detail_row("Start Time:", "-"),
-                        self._create_detail_row("Duration:", "-"),
-                        self._create_detail_row("Tariff:", "-"),
-                        self._create_detail_row("Current Cost:", "-"),
-                        ft.Text("Products:", weight=ft.FontWeight.BOLD),
-                        ft.Column([], scroll="auto", height=80)
-                    ]
-                ),
-                ft.Row(
-                    controls=[
-                        ft.ElevatedButton(
-                            "Start Session",
-                            color="white",
-                            bgcolor="#42A5F5",
-                            height=36,
-                            on_click=self.start_session
-                        ),
-                        ft.ElevatedButton(
-                            "Close Bill",
-                            color="white",
-                            bgcolor="#EF5350",
-                            height=36,
-                            on_click=self.close_bill
-                        )
-                    ],
-                    spacing=10
-                )
-            ],
-            spacing=10
-        )
-    
-    def _create_detail_row(self, label: str, value: str):
-        return ft.Row(
-            controls=[
-                ft.Text(label, size=14, width=120, color="#616161"),
-                ft.Text(value, size=14, weight=ft.FontWeight.W_500),
-            ],
-            spacing=10
-        )
-    
-    def update_details(self, table: Optional[BilliardTable] = None):
-        self.current_table = table
-        self.visible = table is not None
-        
-        if table:
-            details = self.content.controls[2].controls
-            details[0].controls[1].value = table.status.value.capitalize()
-            details[1].controls[1].value = table.client_name if table.client_name else "-"
-            details[2].controls[1].value = table.start_time.strftime("%H:%M:%S") if table.start_time else "-"
-            details[3].controls[1].value = self._get_duration(table) if table.start_time else "-"
-            details[4].controls[1].value = f"${table.current_tariff}/hour"
-            details[5].controls[1].value = f"${self._get_estimated_cost(table):.2f}" if table.start_time else "-"
-            
-            # Update products list
-            products_list = self.content.controls[2].controls[7]
-            products_list.controls.clear()
-            for product in table.products:
-                products_list.controls.append(
-                    ft.Text(f"• {product['name']} (${product['price']:.2f})", size=12)
-                )
-            
-            # Update buttons
-            buttons = self.content.controls[3].controls
-            buttons[0].text = "End Session" if table.status == TableStatus.OCCUPIED else "Start Session"
-            buttons[0].bgcolor = "#EF5350" if table.status == TableStatus.OCCUPIED else "#42A5F5"
-        
+        self.border = ft.border.all(1, ft.colors.with_opacity(0.8, "#42A5F5") if e.data == "true" else ft.colors.with_opacity(0.3, "#616161"))
+        self.bgcolor = ft.colors.with_opacity(0.9, "#616161") if e.data == "true" else ft.colors.with_opacity(0.8, "#424242")
+        self.content.controls[0].scale = 1.1 if e.data == "true" else 1
         self.update()
     
-    def _get_duration(self, table: BilliardTable) -> str:
-        duration = datetime.datetime.now() - table.start_time
-        hours, remainder = divmod(duration.total_seconds(), 3600)
-        minutes = math.floor(remainder / 60)
-        return f"{int(hours)}h {minutes:02d}m"
-    
-    def _get_estimated_cost(self, table: BilliardTable) -> float:
-        duration = (datetime.datetime.now() - table.start_time).total_seconds() / 3600
-        product_costs = sum(p['price'] for p in table.products)
-        return (duration * table.current_tariff) + product_costs
-    
-    def start_session(self, e):
-        if self.current_table:
-            if self.current_table.status == TableStatus.AVAILABLE:
-                self.current_table.status = TableStatus.OCCUPIED
-                self.current_table.start_time = datetime.datetime.now()
-                self.current_table.client_name = "Guest"
-                logging.info(f"Session started on Table {self.current_table.number}")
-            else:
-                self.current_table.status = TableStatus.AVAILABLE
-                self.current_table.start_time = None
-                self.current_table.client_name = ""
-                self.current_table.products = []
-                logging.info(f"Session ended on Table {self.current_table.number}")
+    def add_to_table(self, e):
+        if not self.app.tables:
+            self.app.show_snackbar("Нет доступных столов")
+            return
             
-            self.current_table.selected = False
-            self.current_table.border = ft.border.all(2, "#5D4037")
-            self.current_table.update()
-            self.update_details(None)
-            e.page.update()
-    
-    def close_bill(self, e):
-        if self.current_table and self.current_table.status == TableStatus.OCCUPIED:
-            total = self._get_estimated_cost(self.current_table)
-            logging.info(f"Bill closed for Table {self.current_table.number}. Total: ${total:.2f}")
-            self.start_session(e)  # This will end the session
-    
-    def close_panel(self, e):
-        if self.current_table:
-            self.current_table.selected = False
-            self.current_table.border = ft.border.all(2, "#5D4037")
-            self.current_table.update()
-        self.update_details(None)
-        e.page.update()
-
-class BoardSettingsPanel(ft.Container):
-    def __init__(self, page):
-        super().__init__()
-        self.page = page
-        self.width = 300
-        self.bgcolor=ft.colors.WHITE
-        self.border_radius=12
-        self.padding=15
-        self.border=ft.border.all(1, "#E0E0E0")
-        self.elevation=3
-        self.visible = False
+        def on_table_selected(e):
+            if not dd.value:
+                self.app.show_snackbar("Выберите стол")
+                return
+                
+            table_number = int(dd.value)
+            table = next(t for t in self.app.tables if t.number == table_number)
+            if table.status != TableStatus.OCCUPIED:
+                self.app.show_snackbar(f"Стол {table_number} должен быть занят")
+                return
+                
+            table.products.append({"name": self.name, "price": self.price})
+            self.stock -= 1
+            self.content.controls[2].controls[1].value = f"{self.stock} шт."
+            self.update()
+            self.app.update_table_info(table)
+            self.app.show_snackbar(f"Добавлено {self.name} к столу {table_number}")
+            self.app.close_dialog()
         
-        self.board_colors = [
-            {"name": "Green", "value": "#E8F5E9"},
-            {"name": "Blue", "value": "#E3F2FD"},
-            {"name": "Gray", "value": "#F5F5F5"},
-            {"name": "Wood", "value": "#EFEBE9"},
-        ]
+        dd = ft.Dropdown(
+            options=[ft.dropdown.Option(t.number) for t in self.app.tables if t.status == TableStatus.OCCUPIED],
+            width=220,
+            height=48,
+            hint_text="Выберите стол",
+            color="white",
+            bgcolor=ft.colors.with_opacity(0.8, "#424242"),
+            border_color=ft.colors.with_opacity(0.5, "#42A5F5"),
+            focused_border_color="#42A5F5",
+            border_radius=10,
+            text_size=14
+        )
         
-        self.content = ft.Column(
-            controls=[
-                ft.Text("Board Settings", size=18, weight=ft.FontWeight.BOLD),
-                ft.Divider(height=1, color="#E0E0E0"),
-                ft.Text("Board Color:", size=14, color="#616161"),
-                ft.Row(
-                    controls=[
-                        ft.Container(
-                            width=40,
-                            height=40,
-                            border_radius=20,
-                            bgcolor=color["value"],
-                            border=ft.border.all(2, "#BDBDBD"),
-                            on_click=lambda e, c=color["value"]: self.change_board_color(c)
-                        ) for color in self.board_colors
-                    ],
-                    spacing=10
-                ),
-                ft.Text("Table Layout:", size=14, color="#616161"),
+        self.app.page.dialog = ft.AlertDialog(
+            title=ft.Text(f"Добавить {self.name} к столу", color="white", size=18),
+            content=dd,
+            bgcolor=ft.colors.with_opacity(0.9, "#2E2E2E"),
+            actions=[
                 ft.ElevatedButton(
-                    "Reset Layout",
-                    icon=ft.icons.RESTORE,
-                    on_click=self.reset_layout
+                    "Добавить",
+                    on_click=on_table_selected,
+                    style=ft.ButtonStyle(
+                        bgcolor={"": "#42A5F5", "hovered": "#1E88E5"},
+                        padding=ft.Padding(16, 8, 16, 8),
+                        shape=ft.RoundedRectangleBorder(radius=10)
+                    )
+                ),
+                ft.OutlinedButton(
+                    "Отмена",
+                    on_click=lambda e: self.app.close_dialog(),
+                    style=ft.ButtonStyle(
+                        side=ft.BorderSide(1, "#616161"),
+                        shape=ft.RoundedRectangleBorder(radius=10)
+                    )
                 )
             ],
-            spacing=15
+            actions_alignment=ft.MainAxisAlignment.END,
+            shape=ft.RoundedRectangleBorder(radius=12)
         )
-    
-    def change_board_color(self, color):
-        self.page.board_container.bgcolor = color
-        self.page.update()
-        logging.info(f"Board color changed to {color}")
-    
-    def reset_layout(self, e):
-        for i, table in enumerate(self.page.tables):
-            table.left = 50 + (i % 3) * 200
-            table.top = 50 + (i // 3) * 150
-            table.update()
-        logging.info("Table layout reset to default")
+        self.app.page.dialog.open = True
+        self.app.page.update()
 
 class BilliardApp:
     def __init__(self, page: ft.Page):
         self.page = page
-        self.page.title = "Billiard Hub Pro"
+        self.page.title = "Billiard Club Pro"
         self.page.window_width = 1366
         self.page.window_height = 768
         self.page.window_min_width = 1024
         self.page.window_min_height = 600
         self.page.padding = 0
-        self.page.theme_mode = ft.ThemeMode.LIGHT
+        self.page.theme_mode = ft.ThemeMode.DARK
+        self.page.bgcolor = "#121212"
         self.page.fonts = {
-            "Roboto": "https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap",
-            "Montserrat": "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap"
+            "Roboto": "https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
         }
-        self.page.theme = ft.Theme(
-            font_family="Roboto",
-            color_scheme=ft.ColorScheme(
-                primary="#42A5F5",
-                secondary="#66BB6A",
-                surface=ft.colors.WHITE,
-                background="#FAFAFA"
-            )
-        )
+        self.page.theme = ft.Theme(font_family="Roboto")
         
+        self.selected_table = None
         self.current_view = "tables"
-        self.language = Language.RUSSIAN
         self.tables = []
         self.products = [
-            {"name": "Beer", "price": 5.00, "stock": 24},
-            {"name": "Soda", "price": 2.50, "stock": 36},
-            {"name": "Water", "price": 1.50, "stock": 48},
-            {"name": "Snacks", "price": 3.00, "stock": 20},
-            {"name": "Coffee", "price": 2.00, "stock": 30},
-            {"name": "Tea", "price": 1.50, "stock": 40},
+            {"name": "Пиво", "price": 150.00, "stock": 24, "category": "Алкоголь"},
+            {"name": "Кола", "price": 80.00, "stock": 36, "category": "Напитки"},
+            {"name": "Вода", "price": 50.00, "stock": 48, "category": "Напитки"},
+            {"name": "Чипсы", "price": 120.00, "stock": 20, "category": "Закуски"},
+            {"name": "Кофе", "price": 90.00, "stock": 30, "category": "Напитки"},
+            {"name": "Чай", "price": 60.00, "stock": 40, "category": "Напитки"},
+            {"name": "Бургер", "price": 180.00, "stock": 15, "category": "Закуски"},
+            {"name": "Вино", "price": 250.00, "stock": 12, "category": "Алкоголь"},
         ]
+        self.current_category = "Все"
         
         self.setup_ui()
+        self.initialize_tables()
         self.update_clock()
+        self.start_cost_updater()
     
     def setup_ui(self):
-        # Navbar
+        # Верхняя панель с эффектом стекла
         self.navbar = ft.Container(
             height=70,
-            bgcolor=ft.colors.WHITE,
-            padding=ft.padding.symmetric(horizontal=25),
-            border=ft.border.only(bottom=ft.border.BorderSide(1, "#E0E0E0")),
+            bgcolor=ft.colors.with_opacity(0.7, "#1E1E1E"),
+            padding=ft.padding.symmetric(horizontal=30),
+            border=ft.border.only(bottom=ft.border.BorderSide(1, ft.colors.with_opacity(0.2, "#FFFFFF"))),
             content=ft.Row(
                 controls=[
                     ft.Row(
                         controls=[
-                            ft.Icon(ft.icons.SPORTS_BAR, color="#42A5F5", size=28),
-                            ft.Text("Billiard Hub", size=24, weight=ft.FontWeight.BOLD, font_family="Montserrat"),
+                            ft.Icon(ft.icons.SPORTS_BAR, color="#42A5F5", size=30),
+                            ft.Text("Billiard Club Pro", size=24, weight=ft.FontWeight.BOLD, color="white"),
                         ],
-                        spacing=10
+                        spacing=12,
+                        alignment=ft.MainAxisAlignment.START
                     ),
                     ft.Container(expand=True),
-                    ft.PopupMenuButton(
-                        icon=ft.icons.TRANSLATE,
-                        items=[
-                            ft.PopupMenuItem(text="Русский", on_click=lambda e: self.change_language(Language.RUSSIAN)),
-                            ft.PopupMenuItem(text="O'zbek", on_click=lambda e: self.change_language(Language.UZBEK)),
-                            ft.PopupMenuItem(text="English", on_click=lambda e: self.change_language(Language.ENGLISH)),
-                        ]
-                    ),
-                    ft.IconButton(
-                        icon=ft.icons.NOTIFICATIONS_OUTLINED,
-                        icon_size=22,
-                        style=ft.ButtonStyle(
-                            shape=ft.CircleBorder(),
-                            padding=8
-                        )
-                    ),
-                    ft.IconButton(
-                        icon=ft.icons.SETTINGS_OUTLINED,
-                        icon_size=22,
-                        style=ft.ButtonStyle(
-                            shape=ft.CircleBorder(),
-                            padding=8
-                        )
-                    ),
                     ft.Container(
-                        width=180,
-                        height=40,
-                        bgcolor="#F5F5F5",
-                        border_radius=20,
-                        padding=ft.padding.symmetric(horizontal=12),
+                        width=200,
+                        height=44,
+                        bgcolor=ft.colors.with_opacity(0.4, "#424242"),
+                        border_radius=22,
+                        padding=ft.padding.symmetric(horizontal=16),
                         content=ft.Row(
                             controls=[
-                                ft.Icon(ft.icons.ACCOUNT_CIRCLE_OUTLINED, size=20),
-                                ft.Text("Administrator", size=14),
+                                ft.Icon(ft.icons.ACCOUNT_CIRCLE_OUTLINED, size=22, color="white"),
+                                ft.Text("Администратор", size=14, color="white"),
                             ],
-                            spacing=10
-                        )
+                            spacing=12,
+                            alignment=ft.MainAxisAlignment.CENTER
+                        ),
+                        border=ft.border.all(1, ft.colors.with_opacity(0.1, "#FFFFFF")),
+                        animate=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
+                        on_hover=lambda e: self._navbar_hover(e)
                     ),
                     self.clock_display()
                 ],
                 alignment=ft.MainAxisAlignment.START,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=20
+            ),
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=20,
+                color=ft.colors.with_opacity(0.3, "#000000"),
             )
         )
         
-        # Sidebar
+        # Боковое меню
         self.sidebar = ft.Container(
             width=240,
-            bgcolor=ft.colors.WHITE,
-            padding=ft.padding.only(top=20),
-            border=ft.border.only(right=ft.border.BorderSide(1, "#E0E0E0")),
+            bgcolor=ft.colors.with_opacity(0.8, "#1E1E1E"),
+            padding=ft.padding.only(top=20, left=10, right=10),
+            border=ft.border.only(right=ft.border.BorderSide(1, ft.colors.with_opacity(0.1, "#FFFFFF"))),
             content=ft.Column(
                 controls=[
-                    self._create_nav_item("Tables", ft.icons.TABLE_RESTAURANT_OUTLINED, "tables"),
-                    self._create_nav_item("Service", ft.icons.LOCAL_BAR_OUTLINED, "service"),
-                    self._create_nav_item("Reports", ft.icons.INSERT_CHART_OUTLINED, "reports"),
-                    self._create_nav_item("Settings", ft.icons.SETTINGS_OUTLINED, "settings"),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.icons.TABLE_RESTAURANT_OUTLINED, color="white"),
+                        title=ft.Text("Столы", color="white"),
+                        selected=self.current_view == "tables",
+                        on_click=lambda e: self.switch_view("tables"),
+                        hover_color=ft.colors.with_opacity(0.1, "#42A5F5"),
+                        height=48,
+                        shape=ft.RoundedRectangleBorder(radius=8)
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.icons.LOCAL_BAR_OUTLINED, color="white"),
+                        title=ft.Text("Бар", color="white"),
+                        selected=self.current_view == "service",
+                        on_click=lambda e: self.switch_view("service"),
+                        hover_color=ft.colors.with_opacity(0.1, "#42A5F5"),
+                        height=48,
+                        shape=ft.RoundedRectangleBorder(radius=8)
+                    ),
                     ft.Container(expand=True),
-                    ft.Divider(height=1, color="#E0E0E0"),
-                    ft.Container(
-                        padding=20,
-                        content=ft.Column(
-                            controls=[
-                                ft.Text("SYSTEM STATUS", size=12, color="#757575", weight=ft.FontWeight.BOLD),
-                                ft.Row(
-                                    controls=[
-                                        ft.Container(
-                                            width=10,
-                                            height=10,
-                                            border_radius=5,
-                                            bgcolor="#4CAF50"
-                                        ),
-                                        ft.Text("All systems normal", size=12, color="#616161"),
-                                    ],
-                                    spacing=8
-                                )
-                            ],
-                            spacing=5
-                        )
-                    )
                 ],
-                spacing=0
+                spacing=4
             )
         )
         
-        # Table details panel
-        self.table_details_panel = TableDetailsPanel()
+        # Панель информации о столе
+        self.table_info_panel = ft.Container(
+            padding=20,
+            margin=ft.margin.only(bottom=20),
+            border_radius=14,
+            bgcolor=ft.colors.with_opacity(0.7, "#2E2E2E"),
+            border=ft.border.all(1, ft.colors.with_opacity(0.1, "#FFFFFF")),
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Text("Информация о столе", size=20, weight=ft.FontWeight.BOLD, color="white"),
+                            ft.Container(expand=True),
+                            ft.PopupMenuButton(
+                                icon=ft.icons.MORE_VERT,
+                                icon_color="white",
+                                items=self._create_table_menu_items(),
+                                tooltip="Действия со столом"
+                            )
+                        ]
+                    ),
+                    ft.Divider(height=1, color=ft.colors.with_opacity(0.1, "#FFFFFF")),
+                    ft.Column(
+                        controls=[
+                            self._create_info_row("Стол:", "-", True),
+                            self._create_info_row("Статус:", "-"),
+                            self._create_info_row("Время:", "-"),
+                            self._create_info_row("Стоимость:", "-"),
+                            ft.Container(
+                                content=ft.ListView(height=120, spacing=6),
+                                padding=ft.padding.only(top=10)
+                            )  # Для продуктов
+                        ],
+                        spacing=8
+                    )
+                ],
+                spacing=12
+            ),
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=15,
+                color=ft.colors.with_opacity(0.2, "#000000"),
+            )
+        )
         
-        # Board settings panel
-        self.board_settings_panel = BoardSettingsPanel(self.page)
-        
-        # Main content area
+        # Доска с столами
         self.board_container = ft.Container(
             expand=True,
-            bgcolor="#E8F5E9",  # Default green board color
             padding=20,
-            border_radius=12,
-            border=ft.border.all(1, "#E0E0E0")
+            content=ft.GridView(
+                runs_count=4,
+                max_extent=200,
+                child_aspect_ratio=0.9,
+                spacing=20,
+                run_spacing=20,
+            )
         )
         
+        # Фильтры для бара
+        self.category_filter = ft.Row(
+            controls=[
+                ft.ElevatedButton(
+                    "Все",
+                    on_click=lambda e: self.filter_products("Все"),
+                    bgcolor={"": "#42A5F5", "hovered": "#1E88E5"},
+                    color="white",
+                    height=36,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                        padding=ft.Padding(20, 0, 20, 0),
+                        animation_duration=200
+                    )
+                ),
+                ft.ElevatedButton(
+                    "Напитки",
+                    on_click=lambda e: self.filter_products("Напитки"),
+                    bgcolor={"": ft.colors.with_opacity(0.3, "#424242"), "hovered": ft.colors.with_opacity(0.5, "#424242")},
+                    color="white",
+                    height=36,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                        padding=ft.Padding(20, 0, 20, 0),
+                        animation_duration=200
+                    )
+                ),
+                ft.ElevatedButton(
+                    "Закуски",
+                    on_click=lambda e: self.filter_products("Закуски"),
+                    bgcolor={"": ft.colors.with_opacity(0.3, "#424242"), "hovered": ft.colors.with_opacity(0.5, "#424242")},
+                    color="white",
+                    height=36,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                        padding=ft.Padding(20, 0, 20, 0),
+                        animation_duration=200
+                    )
+                ),
+                ft.ElevatedButton(
+                    "Алкоголь",
+                    on_click=lambda e: self.filter_products("Алкоголь"),
+                    bgcolor={"": ft.colors.with_opacity(0.3, "#424242"), "hovered": ft.colors.with_opacity(0.5, "#424242")},
+                    color="white",
+                    height=36,
+                    style=ft.ButtonStyle(
+                        shape=ft.RoundedRectangleBorder(radius=10),
+                        padding=ft.Padding(20, 0, 20, 0),
+                        animation_duration=200
+                    )
+                ),
+            ],
+            spacing=12,
+            scroll=ft.ScrollMode.AUTO,
+            wrap=True
+        )
+        
+        # Меню бара
+        self.service_view = ft.Column(
+            controls=[
+                ft.Container(
+                    padding=ft.padding.symmetric(vertical=10, horizontal=20),
+                    content=self.category_filter
+                ),
+                ft.GridView(
+                    runs_count=4,
+                    max_extent=220,
+                    child_aspect_ratio=0.85,
+                    spacing=15,
+                    run_spacing=15,
+                    padding=20,
+                    expand=True
+                )
+            ],
+            expand=True,
+            spacing=0
+        )
+        
+        # Основная область контента
         self.main_content = ft.Container(
             expand=True,
-            bgcolor="#FAFAFA",
-            padding=ft.padding.symmetric(horizontal=25, vertical=20),
-            content=self.create_tables_view()
+            padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            content=ft.Column(
+                controls=[
+                    self.table_info_panel if self.current_view == "tables" else ft.Container(),
+                    ft.Container(
+                        content=self.board_container if self.current_view == "tables" else self.service_view,
+                        expand=True
+                    )
+                ],
+                expand=True
+            )
         )
         
-        # Layout
         self.page.add(
             ft.Column(
                 controls=[self.navbar],
@@ -559,378 +604,344 @@ class BilliardApp:
             )
         )
     
-    def change_language(self, language: Language):
-        self.language = language
-        # In a complete implementation, this would update all UI text
-        logging.info(f"Language changed to {language.value}")
-        self.page.snack_bar = ft.SnackBar(
-            content=ft.Text(f"Language set to {language.name}"),
-            action="OK"
-        )
-        self.page.snack_bar.open = True
-        self.page.update()
+    def _navbar_hover(self, e):
+        e.control.bgcolor = ft.colors.with_opacity(0.6, "#424242") if e.data == "true" else ft.colors.with_opacity(0.4, "#424242")
+        e.control.update()
     
-    def _create_nav_item(self, title: str, icon: str, view_name: str):
-        return ft.Container(
-            width=240,
-            height=50,
-            padding=ft.padding.only(left=25),
-            on_click=lambda e: self.switch_view(view_name),
-            bgcolor="#E3F2FD" if self.current_view == view_name else "transparent",
-            border_radius=ft.border_radius.only(top_right=6, bottom_right=6),
-            content=ft.Row(
-                controls=[
-                    ft.Icon(icon, color="#42A5F5" if self.current_view == view_name else "#757575", size=20),
-                    ft.Text(title, color="#424242" if self.current_view == view_name else "#616161", size=15),
-                ],
-                spacing=15
+    def _create_table_menu_items(self):
+        items = [
+            ft.PopupMenuItem(
+                content=ft.Text("Свободен", color="white"),
+                on_click=lambda e: self.change_table_status(TableStatus.AVAILABLE),
+            ),
+            ft.PopupMenuItem(
+                content=ft.Text("Занят", color="white"),
+                on_click=lambda e: self.change_table_status(TableStatus.OCCUPIED),
+            ),
+            ft.PopupMenuItem(
+                content=ft.Text("Обслуживание", color="white"),
+                on_click=lambda e: self.change_table_status(TableStatus.MAINTENANCE),
+            ),
+            ft.PopupMenuItem(
+                content=ft.Text("Бронь", color="white"),
+                on_click=lambda e: self.change_table_status(TableStatus.RESERVED),
+            ),
+            ft.PopupMenuItem(),
+        ]
+        
+        if self.selected_table and self.selected_table.status == TableStatus.OCCUPIED:
+            items.append(
+                ft.PopupMenuItem(
+                    content=ft.Text("Остановить аренду", color="white"),
+                    on_click=self.stop_rental,
+                    icon=ft.icons.STOP
+                )
+            )
+            items.append(ft.PopupMenuItem())
+            
+        items.append(
+            ft.PopupMenuItem(
+                content=ft.Text("Удалить стол", color="white"),
+                on_click=self.remove_table,
+                icon=ft.icons.DELETE
             )
         )
+        
+        return items
+    
+    def _create_info_row(self, label: str, value: str, bold: bool = False):
+        return ft.Row(
+            controls=[
+                ft.Text(label, size=16, width=120, color="#BDBDBD"),
+                ft.Text(value, size=16, weight=ft.FontWeight.BOLD if bold else None, color="white")
+            ],
+            spacing=10,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER
+        )
+    
+    def initialize_tables(self):
+        for i in range(1, 9):
+            status = TableStatus.AVAILABLE
+            if i % 3 == 0: status = TableStatus.OCCUPIED
+            
+            table = BilliardTable(
+                app=self,
+                number=i,
+                status=status
+            )
+            if status == TableStatus.OCCUPIED:
+                table.start_time = datetime.datetime.now() - datetime.timedelta(minutes=random.randint(5, 120))
+            
+            self.tables.append(table)
+        
+        self.board_container.content.controls = self.tables
+        self.board_container.update()
     
     def clock_display(self):
-        self.clock = ft.Text(
-            datetime.datetime.now().strftime("%H:%M:%S"),
-            size=16,
-            weight=ft.FontWeight.W_600,
-        )
-        self.date_display = ft.Text(
-            datetime.datetime.now().strftime("%d %b, %Y"),
-            size=14,
-            color="#616161"
-        )
+        self.clock = ft.Text(datetime.datetime.now().strftime("%H:%M:%S"), size=16, color="white")
+        self.date_display = ft.Text(datetime.datetime.now().strftime("%d.%m.%Y"), size=14, color="#BDBDBD")
         return ft.Container(
             content=ft.Column(
                 controls=[self.clock, self.date_display],
                 spacing=0,
                 horizontal_alignment=ft.CrossAxisAlignment.END
             ),
-            padding=ft.padding.only(left=20)
+            padding=ft.padding.only(right=10)
         )
     
     def update_clock(self):
-        while True:
-            time.sleep(1)
-            self.clock.value = datetime.datetime.now().strftime("%H:%M:%S")
-            self.date_display.value = datetime.datetime.now().strftime("%d %b, %Y")
-            self.clock.update()
-            self.date_display.update()
+        def update():
+            while True:
+                try:
+                    time.sleep(1)
+                    current_time = datetime.datetime.now().strftime("%H:%M:%S")
+                    current_date = datetime.datetime.now().strftime("%d.%m.%Y")
+                    
+                    if hasattr(self, 'clock') and hasattr(self, 'date_display'):
+                        self.clock.value = current_time
+                        self.date_display.value = current_date
+                        self.clock.update()
+                        self.date_display.update()
+                except Exception as e:
+                    logging.error(f"Error updating clock: {e}")
+                    time.sleep(5)
+        
+        import threading
+        threading.Thread(target=update, daemon=True).start()
+    
+    def start_cost_updater(self):
+        def update_cost():
+            while True:
+                try:
+                    time.sleep(60)  # Обновляем каждую минуту
+                    for table in self.tables:
+                        if table.status == TableStatus.OCCUPIED and table.start_time:
+                            duration = datetime.datetime.now() - table.start_time
+                            hours = int(duration.total_seconds() // 3600)
+                            minutes = int((duration.total_seconds() % 3600) // 60)
+                            seconds = int(duration.total_seconds() % 60)
+                            
+                            if hasattr(table, 'time_text') and isinstance(table.time_text, ft.Text):
+                                table.time_text.value = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                                table.update()
+                            
+                            if table == self.selected_table:
+                                self.update_table_info(table)
+                except Exception as e:
+                    logging.error(f"Error updating costs: {e}")
+                    time.sleep(5)
+        
+        import threading
+        threading.Thread(target=update_cost, daemon=True).start()
     
     def switch_view(self, view_name):
         self.current_view = view_name
-        self.sidebar.content.controls = [
-            self._create_nav_item("Tables", ft.icons.TABLE_RESTAURANT_OUTLINED, "tables"),
-            self._create_nav_item("Service", ft.icons.LOCAL_BAR_OUTLINED, "service"),
-            self._create_nav_item("Reports", ft.icons.INSERT_CHART_OUTLINED, "reports"),
-            self._create_nav_item("Settings", ft.icons.SETTINGS_OUTLINED, "settings"),
-            ft.Container(expand=True),
-            ft.Divider(height=1, color="#E0E0E0"),
-            self.sidebar.content.controls[-1]
-        ]
-        
-        if view_name == "tables":
-            self.main_content.content = self.create_tables_view()
-        elif view_name == "service":
-            self.main_content.content = self.create_service_view()
-        elif view_name == "reports":
-            self.main_content.content = self.create_reports_view()
-        elif view_name == "settings":
-            self.main_content.content = self.create_settings_view()
-        
-        self.sidebar.update()
-        self.main_content.update()
-    
-    def create_tables_view(self):
-        # Statistics row
-        stats = ft.Container(
-            height=110,
-            bgcolor=ft.colors.WHITE,
-            border_radius=12,
-            padding=15,
-            border=ft.border.all(1, "#E0E0E0"),
-            content=ft.Row(
-                controls=[
-                    self._create_stat_card("Total Tables", "8", "#42A5F5", ft.icons.TABLE_RESTAURANT),
-                    self._create_stat_card("Occupied", "3", "#EF5350", ft.icons.ACCESS_TIME),
-                    self._create_stat_card("Available", "4", "#66BB6A", ft.icons.CHECK_CIRCLE),
-                    self._create_stat_card("Reserved", "1", "#AB47BC", ft.icons.BOOKMARK),
-                    self._create_stat_card("Today's Revenue", "$342.75", "#26A69A", ft.icons.ATTACH_MONEY),
-                ],
-                spacing=15
-            )
+        self.main_content.content.controls[0].visible = view_name == "tables"
+        self.main_content.content.controls[1].content = (
+            self.board_container if view_name == "tables" else self.service_view
         )
-        
-        # Board with tables
-        self.tables_grid = ft.GestureDetector(
-            content=ft.Stack(
-                controls=self.create_tables(),
-                width=self.page.width - 265,
-                height=self.page.height - 350
-            ),
-            drag_interval=10,
-            on_pan_update=self.drag_tables
-        )
-        
-        self.board_container.content = self.tables_grid
-        
-        return ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Text("Tables Management", size=22, weight=ft.FontWeight.BOLD),
-                        ft.Container(expand=True),
-                        ft.IconButton(
-                            icon=ft.icons.PALETTE_OUTLINED,
-                            tooltip="Board Settings",
-                            on_click=lambda e: self.toggle_board_settings()
-                        )
-                    ]
-                ),
-                ft.Container(height=10),
-                stats,
-                ft.Container(height=15),
-                ft.Row(
-                    controls=[
-                        self.board_container,
-                        ft.Column(
-                            controls=[
-                                self.table_details_panel,
-                                self.board_settings_panel
-                            ],
-                            spacing=15
-                        )
-                    ],
-                    spacing=15,
-                    expand=True
-                )
-            ],
-            spacing=0,
-            expand=True
-        )
+        self.page.update()
     
-    def toggle_board_settings(self):
-        self.board_settings_panel.visible = not self.board_settings_panel.visible
-        self.board_settings_panel.update()
-    
-    def create_tables(self):
-        if not self.tables:
-            self.tables = [
-                BilliardTable(number=1, status=TableStatus.AVAILABLE, left=50, top=50),
-                BilliardTable(number=2, status=TableStatus.OCCUPIED, left=250, top=50),
-                BilliardTable(number=3, status=TableStatus.AVAILABLE, left=450, top=50),
-                BilliardTable(number=4, status=TableStatus.MAINTENANCE, left=50, top=180),
-                BilliardTable(number=5, status=TableStatus.AVAILABLE, left=250, top=180),
-                BilliardTable(number=6, status=TableStatus.RESERVED, left=450, top=180),
-                BilliardTable(number=7, status=TableStatus.AVAILABLE, left=50, top=310),
-                BilliardTable(number=8, status=TableStatus.WAITING, left=250, top=310),
-            ]
-        return self.tables
-    
-    def drag_tables(self, e: ft.DragUpdateEvent):
-        for table in self.tables:
-            if table.scale == 1.05:  # Only move the hovered table
-                table.left = max(20, min(table.left + e.delta_x, self.page.width - table.width - 300))
-                table.top = max(20, min(table.top + e.delta_y, self.page.height - table.height - 250))
-                table.update()
-    
-    def _create_stat_card(self, title: str, value: str, color: str, icon):
-        return ft.Container(
-            width=180,
-            height=80,
-            bgcolor="#FAFAFA",
-            border_radius=10,
-            padding=12,
-            border=ft.border.all(1, "#E0E0E0"),
-            animate=ft.Animation(300, ft.AnimationCurve.EASE_IN_OUT),
-            on_hover=lambda e: self._animate_stat_card(e),
-            content=ft.Row(
-                controls=[
-                    ft.Container(
-                        width=50,
-                        height=50,
-                        bgcolor=f"{color}20",
-                        border_radius=25,
-                        content=ft.Icon(icon, color=color, size=20),
-                        alignment=ft.alignment.center
-                    ),
-                    ft.Column(
-                        controls=[
-                            ft.Text(title, size=12, color="#616161"),
-                            ft.Text(value, size=18, weight=ft.FontWeight.BOLD),
-                        ],
-                        spacing=3
-                    )
-                ],
-                spacing=15
-            )
-        )
-    
-    def _animate_stat_card(self, e):
-        e.control.bgcolor = "#F5F5F5" if e.data == "true" else "#FAFAFA"
-        e.control.update()
-    
-    def create_service_view(self):
-        product_grid = ft.GridView(
-            runs_count=4,
-            max_extent=200,
-            child_aspect_ratio=0.9,
-            spacing=15,
-            run_spacing=15,
-        )
+    def filter_products(self, category: str):
+        self.current_category = category
+        grid_view = self.service_view.controls[1]
+        grid_view.controls.clear()
         
         for product in self.products:
-            product_grid.controls.append(
-                ProductItem(
-                    name=product["name"],
-                    price=product["price"],
-                    stock=product["stock"],
-                    on_click=lambda e, p=product: self.add_product_to_table(p)
+            if category == "Все" or product["category"] == category:
+                grid_view.controls.append(
+                    ProductItem(
+                        app=self,
+                        name=product["name"],
+                        price=product["price"],
+                        stock=product["stock"],
+                        category=product["category"]
+                    )
                 )
-            )
         
-        return ft.Column(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Text("Service Menu", size=22, weight=ft.FontWeight.BOLD),
-                        ft.Container(expand=True),
-                        ft.SearchBar(
-                            width=300,
-                            height=40,
-                            bar_hint_text="Search products...",
-                            bar_bgcolor=ft.colors.WHITE,
-                            bar_overlay_color=ft.colors.WHITE,
-                        )
-                    ]
-                ),
-                ft.Container(height=15),
-                ft.Text("Select a product to add to an occupied table", size=13, color="#757575"),
-                ft.Container(height=15),
-                ft.Container(
-                    content=product_grid,
-                    expand=True
-                )
-            ],
-            spacing=0,
-            expand=True
-        )
-    
-    def add_product_to_table(self, product):
-        occupied_tables = [t for t in self.tables if t.status == TableStatus.OCCUPIED]
-        if occupied_tables:
-            # In a real app, this would show a dialog to select a table
-            table = random.choice(occupied_tables)
-            table.products.append(product)
-            logging.info(f"Added {product['name']} to Table {table.number}")
-            
-            if table.selected:
-                self.table_details_panel.update_details(table)
-            
-            self.page.snack_bar = ft.SnackBar(
-                content=ft.Text(f"Added {product['name']} to Table {table.number}"),
-                action="OK"
+        # Обновляем состояние кнопок фильтров
+        for btn in self.category_filter.controls:
+            btn.bgcolor = (
+                {"": "#42A5F5", "hovered": "#1E88E5"} 
+                if btn.text == category 
+                else {"": ft.colors.with_opacity(0.3, "#424242"), "hovered": ft.colors.with_opacity(0.5, "#424242")}
             )
-            self.page.snack_bar.open = True
+            btn.update()
+        
+        self.page.update()
+    
+    def update_table_info(self, table: Optional[BilliardTable] = None):
+        self.selected_table = table
+        info = self.table_info_panel.content.controls[2].controls
+        
+        if table:
+            info[0].controls[1].value = f"{table.number}"
+            info[1].controls[1].value = table.status.value
+            info[1].controls[1].color = table.status_colors[table.status]
+            
+            if table.status == TableStatus.OCCUPIED and table.start_time:
+                duration = datetime.datetime.now() - table.start_time
+                hours = int(duration.total_seconds() // 3600)
+                minutes = int((duration.total_seconds() % 3600) // 60)
+                seconds = int(duration.total_seconds() % 60)
+                info[2].controls[1].value = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                
+                # 10 руб за каждую минуту
+                cost = (duration.total_seconds() / 60) * table.current_tariff
+                cost += sum(p['price'] for p in table.products)
+                info[3].controls[1].value = f"{cost:.2f} ₽"
+                
+                products_list = info[4].content
+                products_list.controls.clear()
+                for product in table.products:
+                    products_list.controls.append(
+                        ft.Text(f"• {product['name']} - {product['price']:.2f} ₽", size=14, color="white")
+                    )
+                info[4].content.update()
+            else:
+                info[2].controls[1].value = "-"
+                info[3].controls[1].value = "-"
+                info[4].content.controls.clear()
+                info[4].content.update()
+        else:
+            for row in info[:4]:
+                row.controls[1].value = "-"
+                row.controls[1].color = None
+            info[4].content.controls.clear()
+            info[4].content.update()
+        
+        # Обновляем меню
+        self.table_info_panel.content.controls[0].controls[2].items = self._create_table_menu_items()
+        self.table_info_panel.update()
+        self.page.update()
+    
+    def change_table_status(self, status: TableStatus):
+        if self.selected_table:
+            self.selected_table.status = status
+            
+            if status == TableStatus.OCCUPIED:
+                self.selected_table.start_time = datetime.datetime.now()
+                self.selected_table.client_name = "Гость"
+            else:
+                self.selected_table.start_time = None
+                self.selected_table.client_name = ""
+                if status != TableStatus.RESERVED:
+                    self.selected_table.products = []
+            
+            # Обновляем отображение стола
+            self.selected_table.update_status_display()
+            self.update_table_info(self.selected_table)
+            self.show_snackbar(f"Статус стола {self.selected_table.number} изменен на {status.value}")
+    
+    def stop_rental(self, e):
+        if not self.selected_table or self.selected_table.status != TableStatus.OCCUPIED:
+            self.show_snackbar("Выберите занятый стол")
+            return
+
+        def close_dlg(e):
+            dlg_modal.open = False
+            self.page.update()
+            # После закрытия диалога меняем статус стола
+            self.change_table_status(TableStatus.AVAILABLE)
+
+        duration = datetime.datetime.now() - self.selected_table.start_time
+        total_seconds = duration.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        seconds = int(total_seconds % 60)
+        
+        time_cost = (total_seconds / 60) * self.selected_table.current_tariff
+        products_cost = sum(p['price'] for p in self.selected_table.products)
+        total_cost = time_cost + products_cost
+        
+        receipt_content = ft.Column(
+            controls=[
+                ft.Text("Чек", size=24, weight=ft.FontWeight.BOLD, color="white"),
+                ft.Divider(color=ft.colors.with_opacity(0.1, "#FFFFFF")),
+                ft.Text(f"Стол: {self.selected_table.number}", size=18, color="white"),
+                ft.Text(f"Время: {hours:02d}:{minutes:02d}:{seconds:02d}", size=16, color="white"),
+                ft.Text(f"Тариф: {self.selected_table.current_tariff} руб/мин", size=16, color="white"),
+                ft.Text(f"Стоимость времени: {time_cost:.2f} ₽", size=16, color="white"),
+                ft.Text("Товары:", size=16, weight=ft.FontWeight.BOLD, color="white"),
+                *[ft.Text(f"- {p['name']}: {p['price']:.2f} ₽", color="white") for p in self.selected_table.products],
+                ft.Divider(color=ft.colors.with_opacity(0.1, "#FFFFFF")),
+                ft.Text(f"Итого: {total_cost:.2f} ₽", size=20, weight=ft.FontWeight.BOLD, color="#4CAF50"),
+            ],
+            spacing=10
+        )
+
+        dlg_modal = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Оплата аренды"),
+            content=ft.Container(
+                content=receipt_content,
+                padding=10
+            ),
+            actions=[
+                ft.TextButton("Закрыть", on_click=close_dlg),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        def open_dlg_modal(e):
+            self.page.dialog = dlg_modal
+            dlg_modal.open = True
+            self.page.update()
+
+        open_dlg_modal(e)
+    
+    def remove_table(self, e):
+        if not self.selected_table:
+            self.show_snackbar("Выберите стол для удаления")
+            return
+
+        def confirm_delete(e):
+            table_to_remove = self.selected_table
+            self.tables.remove(table_to_remove)
+            self.selected_table = None
+            self.update_table_info(None)
+            self.board_container.content.controls = self.tables
+            self.board_container.update()
+            self.show_snackbar(f"Удален стол {table_to_remove.number}")
+            dlg_modal.open = False
+            self.page.update()
+
+        def close_dlg(e):
+            dlg_modal.open = False
+            self.page.update()
+
+        dlg_modal = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Подтверждение удаления"),
+            content=ft.Text(f"Вы уверены, что хотите удалить стол {self.selected_table.number}?"),
+            actions=[
+                ft.TextButton("Да", on_click=confirm_delete),
+                ft.TextButton("Нет", on_click=close_dlg),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        def open_dlg_modal(e):
+            self.page.dialog = dlg_modal
+            dlg_modal.open = True
+            self.page.update()
+
+        open_dlg_modal(e)
+    
+    def close_dialog(self):
+        if hasattr(self.page, 'dialog'):
+            self.page.dialog.open = False
             self.page.update()
     
-    def create_reports_view(self):
-        return ft.Column(
-            controls=[
-                ft.Text("Analytics & Reports", size=22, weight=ft.FontWeight.BOLD),
-                ft.Container(height=15),
-                ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Text("Revenue Report", size=18),
-                            ft.Image(src="https://via.placeholder.com/800x400?text=Revenue+Chart"),
-                            ft.Text("Table Utilization", size=18),
-                            ft.Image(src="https://via.placeholder.com/800x400?text=Utilization+Chart"),
-                        ],
-                        spacing=20
-                    ),
-                    bgcolor=ft.colors.WHITE,
-                    border_radius=12,
-                    padding=20,
-                    border=ft.border.all(1, "#E0E0E0"),
-                    expand=True
-                )
-            ],
-            spacing=0,
-            expand=True
+    def show_snackbar(self, message: str):
+        self.page.snack_bar = ft.SnackBar(
+            content=ft.Text(message, color="white"),
+            bgcolor="#424242",
+            behavior=ft.SnackBarBehavior.FLOATING,
+            elevation=10,
+            shape=ft.RoundedRectangleBorder(radius=10)
         )
-    
-    def create_settings_view(self):
-        return ft.Column(
-            controls=[
-                ft.Text("Settings", size=22, weight=ft.FontWeight.BOLD),
-                ft.Container(height=15),
-                ft.Container(
-                    content=ft.Tabs(
-                        tabs=[
-                            ft.Tab(
-                                text="General",
-                                content=ft.Column(
-                                    controls=[
-                                        ft.ListTile(
-                                            title=ft.Text("Language"),
-                                            subtitle=ft.Text("Change application language"),
-                                            trailing=ft.PopupMenuButton(
-                                                icon=ft.icons.ARROW_DROP_DOWN,
-                                                items=[
-                                                    ft.PopupMenuItem(text="Русский", on_click=lambda e: self.change_language(Language.RUSSIAN)),
-                                                    ft.PopupMenuItem(text="O'zbek", on_click=lambda e: self.change_language(Language.UZBEK)),
-                                                    ft.PopupMenuItem(text="English", on_click=lambda e: self.change_language(Language.ENGLISH)),
-                                                ]
-                                            )
-                                        ),
-                                        ft.Divider(),
-                                        ft.ListTile(
-                                            title=ft.Text("Theme"),
-                                            subtitle=ft.Text("Light/Dark mode"),
-                                            trailing=ft.Switch(
-                                                value=True,
-                                                on_change=lambda e: self.toggle_theme(e.control.value)
-                                            )
-                                        )
-                                    ],
-                                    spacing=0
-                                )
-                            ),
-                            ft.Tab(
-                                text="Tariffs",
-                                content=ft.Column(
-                                    controls=[
-                                        ft.Text("Tariff settings will be here", size=16)
-                                    ],
-                                    alignment=ft.MainAxisAlignment.CENTER,
-                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
-                                )
-                            ),
-                            ft.Tab(
-                                text="Users",
-                                content=ft.Column(
-                                    controls=[
-                                        ft.Text("User management will be here", size=16)
-                                    ],
-                                    alignment=ft.MainAxisAlignment.CENTER,
-                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
-                                )
-                            )
-                        ]
-                    ),
-                    bgcolor=ft.colors.WHITE,
-                    border_radius=12,
-                    padding=20,
-                    border=ft.border.all(1, "#E0E0E0"),
-                    expand=True
-                )
-            ],
-            spacing=0,
-            expand=True
-        )
-    
-    def toggle_theme(self, is_light):
-        self.page.theme_mode = ft.ThemeMode.LIGHT if is_light else ft.ThemeMode.DARK
-        logging.info(f"Theme changed to {'light' if is_light else 'dark'} mode")
+        self.page.snack_bar.open = True
         self.page.update()
 
 def main(page: ft.Page):
